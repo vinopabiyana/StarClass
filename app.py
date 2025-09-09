@@ -3,13 +3,16 @@ import joblib
 import pandas as pd
 import numpy as np
 
-# ------------------ Load Model ------------------
+# ------------------ Load Model & Preprocessors ------------------
 @st.cache_resource
-def load_model():
+def load_artifacts():
     model = joblib.load("star_classifier_model.pkl")
-    return model
+    scaler = joblib.load("scaler.pkl")
+    color_encoder = joblib.load("color_encoder.pkl")
+    spectral_encoder = joblib.load("spectral_encoder.pkl")
+    return model, scaler, color_encoder, spectral_encoder
 
-model = load_model()
+model, scaler, color_encoder, spectral_encoder = load_artifacts()
 
 # ------------------ Star Type Mapping ------------------
 star_type_dict = {
@@ -26,7 +29,7 @@ st.markdown(
     """
     <style>
     body {
-        background: url('https://cdn.pixabay.com/photo/2013/07/18/20/25/space-164401_960_720.jpg');
+        background: url('https://www.pexels.com/search/space%20background/?utm_source');
         background-size: cover;
         background-attachment: fixed;
         color: white;
@@ -66,24 +69,30 @@ luminosity = st.number_input("Luminosity (L/Lo)", min_value=0.0001, max_value=10
 radius = st.number_input("Radius (R/Ro)", min_value=0.01, max_value=1000.0, value=1.0)
 abs_magnitude = st.number_input("Absolute Magnitude", min_value=-10.0, max_value=20.0, value=4.83)
 
-color = st.text_input("Star Color (Ex: Red, Blue, White, Yellow)", value="Yellow")
-spectral = st.text_input("Spectral Class (Ex: O, B, A, F, G, K, M)", value="G")
+color = st.selectbox("Star Color", options=color_encoder.classes_)
+spectral = st.selectbox("Spectral Class", options=spectral_encoder.classes_)
 
 # ------------------ Prediction ------------------
 def predict_star(temp, lum, rad, mag, color, spectral):
     try:
-        # Match capitalization to training
-        color = color.strip().capitalize()
-        spectral = spectral.strip().upper()
+        # Encode categorical features
+        color_encoded = color_encoder.transform([color])[0]
+        spectral_encoded = spectral_encoder.transform([spectral])[0]
 
-        input_data = pd.DataFrame([[temp, lum, rad, mag, color, spectral]],
+        # Prepare input
+        input_data = pd.DataFrame([[temp, lum, rad, mag, color_encoded, spectral_encoded]],
                                   columns=["Temperature", "L", "R", "A_M", "Color", "Spectral_Class"])
 
+        # Scale numeric features
+        numeric_cols = ["Temperature", "L", "R", "A_M"]
+        input_data[numeric_cols] = scaler.transform(input_data[numeric_cols])
+
+        # Predict
         prediction = model.predict(input_data)[0]
         return star_type_dict.get(prediction, "Unknown Type ❓")
 
     except Exception as e:
-        return f"⚠️ Error: {str(e)} (Check if inputs match training values!)"
+        return f"⚠️ Error: {str(e)}"
 
 if st.button("🔭 Classify Star"):
     result = predict_star(temperature, luminosity, radius, abs_magnitude, color, spectral)
