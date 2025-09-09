@@ -1,16 +1,15 @@
 import streamlit as st
 import pandas as pd
 import joblib
-import numpy as np
-import time
-import random
+import base64
+import matplotlib.pyplot as plt
 
-# =========================
-# Load Models and Encoders
-# =========================
+# ===============================
+# Load Models
+# ===============================
 @st.cache_resource
 def load_models():
-    model = joblib.load("star_model.pkl")
+    model = joblib.load("star_model.pkl")   # ✅ Correct filename
     scaler = joblib.load("scaler.pkl")
     color_encoder = joblib.load("color_encoder.pkl")
     spectral_encoder = joblib.load("spectral_encoder.pkl")
@@ -18,7 +17,9 @@ def load_models():
 
 model, scaler, color_encoder, spectral_encoder = load_models()
 
-# Mapping of star type numbers to names
+# ===============================
+# Star Type Mapping
+# ===============================
 STAR_TYPES = {
     0: "Brown Dwarf",
     1: "Red Dwarf",
@@ -28,135 +29,113 @@ STAR_TYPES = {
     5: "Hypergiant"
 }
 
-# =========================
-# Prediction Function
-# =========================
-def predict_star(input_df):
-    input_df["Color"] = color_encoder.transform(input_df["Color"])
-    input_df["Spectral_Class"] = spectral_encoder.transform(input_df["Spectral_Class"])
-    scaled_data = scaler.transform(input_df)
-    predictions = model.predict(scaled_data)
-    return [STAR_TYPES[p] for p in predictions]
-
-# =========================
-# Animated Universe Background
-# =========================
-def set_universe_bg():
+# ===============================
+# Background Styling
+# ===============================
+def add_bg_from_url():
     st.markdown(
-        """
+        f"""
         <style>
-        /* Base space background */
-        .stApp {
-            background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
-            overflow: hidden;
+        .stApp {{
+            background-image: url("https://i.ibb.co/qR7D9JX/universe-bg.jpg");
+            background-size: cover;
+            background-attachment: fixed;
             color: white;
-        }
-
-        /* Twinkling stars */
-        .stars {
-            width: 1px;
-            height: 1px;
-            background: transparent;
-            box-shadow: 
-                1000px 2000px #FFF, 1500px 700px #FFF, 500px 1200px #FFF, 
-                700px 300px #FFF, 300px 800px #FFF, 1200px 1500px #FFF;
-            animation: animStar 50s linear infinite;
-        }
-
-        .stars:after {
-            content: " ";
-            position: absolute;
-            top: 2000px;
-            width: 1px;
-            height: 1px;
-            background: transparent;
-            box-shadow: 
-                1000px 2000px #FFF, 1500px 700px #FFF, 500px 1200px #FFF, 
-                700px 300px #FFF, 300px 800px #FFF, 1200px 1500px #FFF;
-        }
-
-        @keyframes animStar {
-            from { transform: translateY(0px); }
-            to { transform: translateY(-2000px); }
-        }
-
-        /* Style improvements */
-        .block-container {
-            background: rgba(0,0,0,0.6);
-            padding: 2rem;
-            border-radius: 15px;
-        }
-        h1, h2, h3 {
-            color: #FFD700;
-            text-shadow: 2px 2px 5px black;
-        }
+        }}
         </style>
-        <div class="stars"></div>
         """,
         unsafe_allow_html=True
     )
 
-set_universe_bg()
+add_bg_from_url()
 
-# =========================
-# Star Animation (emoji fall)
-# =========================
-def star_animation():
-    stars = ["✨", "🌟", "⭐", "💫"]
-    for _ in range(15):
-        st.markdown(f"<h3 style='text-align:center;'>{random.choice(stars)}</h3>", unsafe_allow_html=True)
-        time.sleep(0.1)
+# ===============================
+# Prediction Function
+# ===============================
+def predict_star(input_df):
+    input_df["Color"] = color_encoder.transform(input_df["Color"])
+    input_df["Spectral_Class"] = spectral_encoder.transform(input_df["Spectral_Class"])
 
-# =========================
-# Streamlit UI
-# =========================
-st.title("🌌 Star Type Prediction App")
+    numeric_cols = ["Temperature", "L", "R", "A_M"]
+    input_df[numeric_cols] = scaler.transform(input_df[numeric_cols])
 
-menu = ["Single Prediction", "Batch Prediction"]
-choice = st.sidebar.radio("Choose Mode", menu)
+    prediction = model.predict(input_df)[0]
+    return STAR_TYPES[prediction]
 
-if choice == "Single Prediction":
-    st.subheader("🔭 Enter Star Details")
+# ===============================
+# Sidebar Navigation
+# ===============================
+st.sidebar.title("🔭 Star Type Classifier")
+page = st.sidebar.radio("Choose Option", ["Single Prediction", "Batch Prediction", "Visualization"])
 
-    color = st.selectbox("Star Color", color_encoder.classes_)
-    spectral_class = st.selectbox("Spectral Class", spectral_encoder.classes_)
-    temperature = st.number_input("Temperature (K)", min_value=1000, max_value=50000, value=5778)
-    luminosity = st.number_input("Luminosity (L/Lo)", min_value=0.0001, max_value=100000.0, value=1.0)
-    radius = st.number_input("Radius (R/Ro)", min_value=0.1, max_value=1000.0, value=1.0)
-    absolute_magnitude = st.number_input("Absolute Magnitude", min_value=-15.0, max_value=20.0, value=4.83)
+# ===============================
+# Single Prediction
+# ===============================
+if page == "Single Prediction":
+    st.title("⭐ Star Type Classification")
+    st.markdown("Enter the star parameters below:")
 
-    if st.button("Predict Star Type"):
-        input_data = pd.DataFrame({
-            "Temperature": [temperature],
-            "Luminosity": [luminosity],
-            "Radius": [radius],
-            "Absolute_Magnitude": [absolute_magnitude],
-            "Color": [color],
-            "Spectral_Class": [spectral_class]
-        })
+    temp = st.number_input("Temperature (K)", min_value=2000, max_value=40000, value=5778)
+    L = st.number_input("Luminosity (L/Lo)", min_value=0.01, max_value=100000, value=1.0)
+    R = st.number_input("Radius (R/Ro)", min_value=0.1, max_value=1000.0, value=1.0)
+    A_M = st.number_input("Absolute Magnitude", min_value=-10.0, max_value=20.0, value=4.8)
 
-        prediction = predict_star(input_data)[0]
+    color = st.selectbox("Color", ["Red", "Blue", "Yellow", "White", "Orange"])
+    spectral = st.selectbox("Spectral Class", ["O", "B", "A", "F", "G", "K", "M"])
 
-        st.success(f"🌟 The predicted star type is: **{prediction}**")
-        star_animation()
+    if st.button("🔮 Predict Star Type"):
+        input_data = pd.DataFrame([[temp, L, R, A_M, color, spectral]],
+                                  columns=["Temperature", "L", "R", "A_M", "Color", "Spectral_Class"])
+        result = predict_star(input_data)
+        st.success(f"🌟 Predicted Star Type: **{result}**")
 
-elif choice == "Batch Prediction":
-    st.subheader("📂 Upload CSV File for Batch Prediction")
-    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+# ===============================
+# Batch Prediction
+# ===============================
+elif page == "Batch Prediction":
+    st.title("📂 Batch Star Type Prediction")
+    uploaded_file = st.file_uploader("Upload CSV with columns: Temperature, L, R, A_M, Color, Spectral_Class", type="csv")
 
-    if uploaded_file is not None:
+    if uploaded_file:
         batch_df = pd.read_csv(uploaded_file)
-        st.write("📊 Uploaded Data", batch_df)
+        st.write("✅ Uploaded Data Preview:", batch_df.head())
 
         try:
-            predictions = predict_star(batch_df)
-            batch_df["Predicted_Star_Type"] = predictions
+            batch_df["Color"] = color_encoder.transform(batch_df["Color"])
+            batch_df["Spectral_Class"] = spectral_encoder.transform(batch_df["Spectral_Class"])
+            numeric_cols = ["Temperature", "L", "R", "A_M"]
+            batch_df[numeric_cols] = scaler.transform(batch_df[numeric_cols])
 
-            st.success("✅ Batch Prediction Completed!")
+            predictions = model.predict(batch_df)
+            batch_df["Predicted_Type"] = [STAR_TYPES[p] for p in predictions]
+
+            st.success("🌟 Predictions completed!")
             st.write(batch_df)
 
-            # Visualization: Star type distribution
-            st.bar_chart(batch_df["Predicted_Star_Type"].value_counts())
+            # Download option
+            csv = batch_df.to_csv(index=False)
+            b64 = base64.b64encode(csv.encode()).decode()
+            href = f'<a href="data:file/csv;base64,{b64}" download="star_predictions.csv">📥 Download Predictions</a>'
+            st.markdown(href, unsafe_allow_html=True)
 
         except Exception as e:
-            st.error(f"Error in processing: {e}")
+            st.error(f"❌ Error in prediction: {e}")
+
+# ===============================
+# Visualization
+# ===============================
+elif page == "Visualization":
+    st.title("📊 Star Data Visualization")
+    st.markdown("Explore relationships between star features.")
+
+    # Example: Temperature vs Luminosity
+    try:
+        df = pd.read_csv("data/star_preprocessed.csv")  # use your dataset file
+        fig, ax = plt.subplots()
+        scatter = ax.scatter(df["Temperature"], df["L"], c=df["Type"], cmap="viridis")
+        ax.set_xlabel("Temperature (K)")
+        ax.set_ylabel("Luminosity (L/Lo)")
+        ax.set_title("Temperature vs Luminosity by Star Type")
+        st.pyplot(fig)
+    except Exception:
+        st.warning("⚠️ Dataset not found for visualization. Please upload star_preprocessed.csv to /data.")
